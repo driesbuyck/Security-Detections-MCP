@@ -1,0 +1,53 @@
+{
+  "name": "security-detections-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for querying Sigma and Splunk ESCU security detection rules",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "security-detections-mcp": "dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MHaggis/Security-Detections-MCP.git"
+  },
+  "homepage": "https://github.com/MHaggis/Security-Detections-MCP#readme",
+  "bugs": {
+    "url": "https://github.com/MHaggis/Security-Detections-MCP/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "security",
+    "detections",
+    "sigma",
+    "splunk",
+    "escu",
+    "siem",
+    "mitre",
+    "attack"
+  ],
+  "author": "Michael Haag",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^11.0.0",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

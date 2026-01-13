@@ -1,0 +1,29 @@
+# Node.js
+node_modules/
+dist/
+
+# Python (legacy)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Generated data files
+detections.json
+detections.sqlite
+bm25_index.pkl
+results.sqlite
+*.sqlite
+
+# Detection content (users should clone their own)
+detections/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# npm
+*.tgz
+.npm/
