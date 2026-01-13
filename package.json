@@ -35,6 +35,7 @@
   "author": "Michael Haag",
   "license": "Apache-2.0",
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "^11.0.0",
     "yaml": "^2.4.0"

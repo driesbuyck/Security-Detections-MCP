@@ -15,11 +15,21 @@ import {
   listByMitre,
   listByLogsource,
   listBySeverity,
+  listByCve,
+  listByAnalyticStory,
+  listByProcessName,
+  listByDetectionType,
+  listByDataSource,
+  listByMitreTactic,
   getStats,
   getRawYaml,
   getDbPath,
   initDb,
-  dbExists,
+  recreateDb,
+  searchStories,
+  getStoryByName,
+  listStories,
+  listStoriesByCategory,
 } from './db.js';
 import { indexDetections, needsIndexing } from './indexer.js';
 
@@ -32,10 +42,12 @@ function parsePaths(envVar: string | undefined): string[] {
 // Get configured paths from environment
 const SIGMA_PATHS = parsePaths(process.env.SIGMA_PATHS);
 const SPLUNK_PATHS = parsePaths(process.env.SPLUNK_PATHS);
+const ELASTIC_PATHS = parsePaths(process.env.ELASTIC_PATHS);
+const STORY_PATHS = parsePaths(process.env.STORY_PATHS); // Optional - enhances context
 
 // Auto-index on startup if paths are configured and DB is empty
 function autoIndex(): void {
-  if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0) {
+  if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0) {
     return;
   }
   
@@ -43,8 +55,12 @@ function autoIndex(): void {
   
   if (needsIndexing()) {
     console.error('[security-detections-mcp] Auto-indexing detections...');
-    const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS);
-    console.error(`[security-detections-mcp] Indexed ${result.total} detections (${result.sigma_indexed} Sigma, ${result.splunk_indexed} Splunk ESCU)`);
+    const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS);
+    let msg = `[security-detections-mcp] Indexed ${result.total} detections (${result.sigma_indexed} Sigma, ${result.splunk_indexed} Splunk, ${result.elastic_indexed} Elastic)`;
+    if (result.stories_indexed > 0) {
+      msg += `, ${result.stories_indexed} stories`;
+    }
+    console.error(msg);
   }
 }
 
@@ -67,13 +83,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search',
-        description: 'Full-text search across all detection fields (name, description, query, MITRE IDs, tags)',
+        description: 'Full-text search across all detection fields (name, description, query, MITRE IDs, tags, CVEs, analytic stories, process names, file paths, registry paths)',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Search query (FTS5 syntax supported)',
+              description: 'Search query (FTS5 syntax supported). Examples: "powershell.exe", "CVE-2024", "DLL sideloading", "web server"',
             },
             limit: {
               type: 'number',
@@ -122,7 +138,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             source_type: {
               type: 'string',
-              enum: ['sigma', 'splunk_escu'],
+              enum: ['sigma', 'splunk_escu', 'elastic'],
               description: 'Source type to filter by',
             },
             limit: {
@@ -212,8 +228,216 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'list_by_cve',
+        description: 'List detections that cover a specific CVE vulnerability',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            cve_id: {
+              type: 'string',
+              description: 'CVE ID (e.g., CVE-2024-27198, CVE-2021-44228)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['cve_id'],
+        },
+      },
+      {
+        name: 'list_by_analytic_story',
+        description: 'List Splunk detections that belong to a specific analytic story (e.g., "Ransomware", "Data Destruction")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            story: {
+              type: 'string',
+              description: 'Analytic story name or partial match (e.g., "Ransomware", "Windows Persistence")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['story'],
+        },
+      },
+      {
+        name: 'list_by_process_name',
+        description: 'List detections that reference a specific process name (e.g., "powershell.exe", "w3wp.exe", "cmd.exe")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            process_name: {
+              type: 'string',
+              description: 'Process name to search for (e.g., "powershell.exe", "cmd.exe", "nginx.exe")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['process_name'],
+        },
+      },
+      {
+        name: 'list_by_detection_type',
+        description: 'List detections by type (TTP, Anomaly, Hunting, Correlation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            detection_type: {
+              type: 'string',
+              enum: ['TTP', 'Anomaly', 'Hunting', 'Correlation'],
+              description: 'Detection type to filter by',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['detection_type'],
+        },
+      },
+      {
+        name: 'list_by_data_source',
+        description: 'List detections that use a specific data source (e.g., "Sysmon", "Windows Security", "process_creation")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            data_source: {
+              type: 'string',
+              description: 'Data source to search for (e.g., "Sysmon", "Windows Security", "process_creation")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['data_source'],
+        },
+      },
+      {
+        name: 'list_by_mitre_tactic',
+        description: 'List detections by MITRE ATT&CK tactic (e.g., "execution", "persistence", "credential-access")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tactic: {
+              type: 'string',
+              enum: ['reconnaissance', 'resource-development', 'initial-access', 'execution', 
+                     'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+                     'discovery', 'lateral-movement', 'collection', 'command-and-control', 
+                     'exfiltration', 'impact'],
+              description: 'MITRE ATT&CK tactic to filter by',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['tactic'],
+        },
+      },
+      {
+        name: 'search_stories',
+        description: 'Search analytic stories by narrative, description, or name. Stories provide rich context about threat campaigns and detection strategies.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query for stories (e.g., "ransomware encryption", "credential theft", "persistence")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 20)',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'get_story',
+        description: 'Get detailed information about a specific analytic story by name',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Story name (e.g., "Ransomware", "Windows Persistence Techniques")',
+            },
+          },
+          required: ['name'],
+        },
+      },
+      {
+        name: 'list_stories',
+        description: 'List all analytic stories with pagination',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+        },
+      },
+      {
+        name: 'list_stories_by_category',
+        description: 'List analytic stories by category (e.g., "Malware", "Adversary Tactics", "Abuse")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'Story category (e.g., "Malware", "Adversary Tactics", "Abuse", "Cloud Security")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['category'],
+        },
+      },
+      {
         name: 'get_stats',
-        description: 'Get statistics about the indexed detections',
+        description: 'Get statistics about the indexed detections and stories',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -221,7 +445,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'rebuild_index',
-        description: 'Force re-index all detections from configured paths',
+        description: 'Force re-index all detections and stories from configured paths',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -302,7 +526,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case 'list_by_source': {
-        const sourceType = args?.source_type as 'sigma' | 'splunk_escu';
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic';
         const limit = (args?.limit as number) || 100;
         const offset = (args?.offset as number) || 0;
         
@@ -371,6 +595,198 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
+      case 'list_by_cve': {
+        const cveId = args?.cve_id as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!cveId) {
+          return { content: [{ type: 'text', text: 'Error: cve_id is required' }] };
+        }
+        
+        const results = listByCve(cveId, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_analytic_story': {
+        const story = args?.story as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!story) {
+          return { content: [{ type: 'text', text: 'Error: story is required' }] };
+        }
+        
+        const results = listByAnalyticStory(story, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_process_name': {
+        const processName = args?.process_name as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!processName) {
+          return { content: [{ type: 'text', text: 'Error: process_name is required' }] };
+        }
+        
+        const results = listByProcessName(processName, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_detection_type': {
+        const detectionType = args?.detection_type as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!detectionType) {
+          return { content: [{ type: 'text', text: 'Error: detection_type is required' }] };
+        }
+        
+        const results = listByDetectionType(detectionType, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_data_source': {
+        const dataSource = args?.data_source as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!dataSource) {
+          return { content: [{ type: 'text', text: 'Error: data_source is required' }] };
+        }
+        
+        const results = listByDataSource(dataSource, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_mitre_tactic': {
+        const tactic = args?.tactic as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!tactic) {
+          return { content: [{ type: 'text', text: 'Error: tactic is required' }] };
+        }
+        
+        const results = listByMitreTactic(tactic, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'search_stories': {
+        const query = args?.query as string;
+        const limit = (args?.limit as number) || 20;
+        
+        if (!query) {
+          return { content: [{ type: 'text', text: 'Error: query is required' }] };
+        }
+        
+        const results = searchStories(query, limit);
+        if (results.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: 'No stories found. Stories are optional - set STORY_PATHS env var to index them.',
+            }],
+          };
+        }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'get_story': {
+        const storyName = args?.name as string;
+        
+        if (!storyName) {
+          return { content: [{ type: 'text', text: 'Error: name is required' }] };
+        }
+        
+        const story = getStoryByName(storyName);
+        if (!story) {
+          return { content: [{ type: 'text', text: `Story not found: ${storyName}. Stories are optional - set STORY_PATHS env var to index them.` }] };
+        }
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(story, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_stories': {
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        const results = listStories(limit, offset);
+        if (results.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: 'No stories indexed. Stories are optional - set STORY_PATHS env var to index them.',
+            }],
+          };
+        }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_stories_by_category': {
+        const category = args?.category as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!category) {
+          return { content: [{ type: 'text', text: 'Error: category is required' }] };
+        }
+        
+        const results = listStoriesByCategory(category, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
       case 'get_stats': {
         const stats = getStats();
         return {
@@ -382,22 +798,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case 'rebuild_index': {
-        if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0) {
+        if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0) {
           return {
             content: [{
               type: 'text',
-              text: 'Error: No paths configured. Set SIGMA_PATHS and/or SPLUNK_PATHS environment variables.',
+              text: 'Error: No paths configured. Set SIGMA_PATHS, SPLUNK_PATHS, and/or ELASTIC_PATHS environment variables.',
             }],
           };
         }
         
-        const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS);
+        // Recreate DB to apply schema changes
+        recreateDb();
+        
+        const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS);
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
               message: 'Index rebuilt successfully',
               ...result,
+              stories_note: STORY_PATHS.length === 0 ? 'No STORY_PATHS configured - stories not indexed' : undefined,
+              elastic_note: ELASTIC_PATHS.length === 0 ? 'No ELASTIC_PATHS configured - Elastic rules not indexed' : undefined,
               db_path: getDbPath(),
             }, null, 2),
           }],
