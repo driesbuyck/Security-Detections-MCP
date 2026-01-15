@@ -21,6 +21,9 @@ import {
   listByDetectionType,
   listByDataSource,
   listByMitreTactic,
+  listByKqlCategory,
+  listByKqlTag,
+  listByKqlDatasource,
   getStats,
   getRawYaml,
   getDbPath,
@@ -30,6 +33,11 @@ import {
   getStoryByName,
   listStories,
   listStoriesByCategory,
+  getTechniqueIds,
+  generateNavigatorLayer,
+  analyzeCoverage,
+  identifyGaps,
+  suggestDetections,
 } from './db.js';
 import { indexDetections, needsIndexing } from './indexer.js';
 
@@ -43,11 +51,12 @@ function parsePaths(envVar: string | undefined): string[] {
 const SIGMA_PATHS = parsePaths(process.env.SIGMA_PATHS);
 const SPLUNK_PATHS = parsePaths(process.env.SPLUNK_PATHS);
 const ELASTIC_PATHS = parsePaths(process.env.ELASTIC_PATHS);
-const STORY_PATHS = parsePaths(process.env.STORY_PATHS); // Optional - enhances context
+const STORY_PATHS = parsePaths(process.env.STORY_PATHS);
+const KQL_PATHS = parsePaths(process.env.KQL_PATHS);
 
 // Auto-index on startup if paths are configured and DB is empty
 function autoIndex(): void {
-  if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0) {
+  if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0 && KQL_PATHS.length === 0) {
     return;
   }
   
@@ -55,8 +64,8 @@ function autoIndex(): void {
   
   if (needsIndexing()) {
     console.error('[security-detections-mcp] Auto-indexing detections...');
-    const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS);
-    let msg = `[security-detections-mcp] Indexed ${result.total} detections (${result.sigma_indexed} Sigma, ${result.splunk_indexed} Splunk, ${result.elastic_indexed} Elastic)`;
+    const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS, KQL_PATHS);
+    let msg = `[security-detections-mcp] Indexed ${result.total} detections (${result.sigma_indexed} Sigma, ${result.splunk_indexed} Splunk, ${result.elastic_indexed} Elastic, ${result.kql_indexed} KQL)`;
     if (result.stories_indexed > 0) {
       msg += `, ${result.stories_indexed} stories`;
     }
@@ -138,7 +147,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             source_type: {
               type: 'string',
-              enum: ['sigma', 'splunk_escu', 'elastic'],
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
               description: 'Source type to filter by',
             },
             limit: {
@@ -365,6 +374,72 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'list_by_kql_category',
+        description: 'List KQL detections filtered by category (e.g., "Defender For Endpoint", "Azure Active Directory", "Threat Hunting")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'KQL category derived from folder path (e.g., "Defender For Endpoint", "DFIR", "Sentinel")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['category'],
+        },
+      },
+      {
+        name: 'list_by_kql_tag',
+        description: 'List KQL detections filtered by tag (e.g., "ransomware", "hunting", "ti-feed")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tag: {
+              type: 'string',
+              description: 'Tag to filter by (e.g., "ransomware", "dfir", "apt")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['tag'],
+        },
+      },
+      {
+        name: 'list_by_kql_datasource',
+        description: 'List KQL detections that use a specific Microsoft data source (e.g., "DeviceProcessEvents", "SigninLogs", "EmailEvents")',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            data_source: {
+              type: 'string',
+              description: 'Microsoft KQL table name (e.g., "DeviceProcessEvents", "AADSignInEventsBeta", "CloudAppEvents")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['data_source'],
+        },
+      },
+      {
         name: 'search_stories',
         description: 'Search analytic stories by narrative, description, or name. Stories provide rich context about threat campaigns and detection strategies.',
         inputSchema: {
@@ -463,6 +538,122 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['id'],
+        },
+      },
+      {
+        name: 'get_technique_ids',
+        description: 'Get ONLY unique MITRE technique IDs (lightweight - no full detection data). Use this for Navigator layer generation or coverage analysis.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_type: {
+              type: 'string',
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
+              description: 'Filter by source type',
+            },
+            tactic: {
+              type: 'string',
+              enum: ['reconnaissance', 'resource-development', 'initial-access', 'execution', 
+                     'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+                     'discovery', 'lateral-movement', 'collection', 'command-and-control', 
+                     'exfiltration', 'impact'],
+              description: 'Filter by MITRE tactic',
+            },
+            severity: {
+              type: 'string',
+              enum: ['informational', 'low', 'medium', 'high', 'critical'],
+              description: 'Filter by severity',
+            },
+          },
+        },
+      },
+      {
+        name: 'generate_navigator_layer',
+        description: 'Generate a MITRE ATT&CK Navigator layer JSON directly from indexed detections. Returns ready-to-use layer file.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Layer name (e.g., "Elastic Initial Access Coverage")',
+            },
+            description: {
+              type: 'string',
+              description: 'Layer description',
+            },
+            source_type: {
+              type: 'string',
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
+              description: 'Filter by source type',
+            },
+            tactic: {
+              type: 'string',
+              enum: ['reconnaissance', 'resource-development', 'initial-access', 'execution', 
+                     'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+                     'discovery', 'lateral-movement', 'collection', 'command-and-control', 
+                     'exfiltration', 'impact'],
+              description: 'Filter by MITRE tactic',
+            },
+            severity: {
+              type: 'string',
+              enum: ['informational', 'low', 'medium', 'high', 'critical'],
+              description: 'Filter by severity',
+            },
+          },
+          required: ['name'],
+        },
+      },
+      {
+        name: 'analyze_coverage',
+        description: 'Get coverage analysis with stats by tactic, top covered techniques, and weak spots. Returns summary data, not raw detections. Use this instead of listing detections and processing manually.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_type: {
+              type: 'string',
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
+              description: 'Filter by source type (optional - analyzes all if not specified)',
+            },
+          },
+        },
+      },
+      {
+        name: 'identify_gaps',
+        description: 'Identify detection gaps based on a threat profile (ransomware, apt, initial-access, persistence, credential-access, defense-evasion). Returns prioritized gaps with recommendations.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            threat_profile: {
+              type: 'string',
+              enum: ['ransomware', 'apt', 'initial-access', 'persistence', 'credential-access', 'defense-evasion'],
+              description: 'Threat profile to analyze gaps against',
+            },
+            source_type: {
+              type: 'string',
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
+              description: 'Filter by source type (optional)',
+            },
+          },
+          required: ['threat_profile'],
+        },
+      },
+      {
+        name: 'suggest_detections',
+        description: 'Get detection suggestions for a specific technique. Returns existing detections, required data sources, and detection ideas.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            technique_id: {
+              type: 'string',
+              description: 'MITRE technique ID (e.g., T1059.001, T1547.001)',
+            },
+            source_type: {
+              type: 'string',
+              enum: ['sigma', 'splunk_escu', 'elastic', 'kql'],
+              description: 'Filter by source type (optional)',
+            },
+          },
+          required: ['technique_id'],
         },
       },
     ],
@@ -703,6 +894,60 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
+      case 'list_by_kql_category': {
+        const category = args?.category as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!category) {
+          return { content: [{ type: 'text', text: 'Error: category is required' }] };
+        }
+        
+        const results = listByKqlCategory(category, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_kql_tag': {
+        const tag = args?.tag as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!tag) {
+          return { content: [{ type: 'text', text: 'Error: tag is required' }] };
+        }
+        
+        const results = listByKqlTag(tag, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
+      case 'list_by_kql_datasource': {
+        const dataSource = args?.data_source as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+        
+        if (!dataSource) {
+          return { content: [{ type: 'text', text: 'Error: data_source is required' }] };
+        }
+        
+        const results = listByKqlDatasource(dataSource, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+      
       case 'search_stories': {
         const query = args?.query as string;
         const limit = (args?.limit as number) || 20;
@@ -798,11 +1043,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case 'rebuild_index': {
-        if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0) {
+        if (SIGMA_PATHS.length === 0 && SPLUNK_PATHS.length === 0 && ELASTIC_PATHS.length === 0 && KQL_PATHS.length === 0) {
           return {
             content: [{
               type: 'text',
-              text: 'Error: No paths configured. Set SIGMA_PATHS, SPLUNK_PATHS, and/or ELASTIC_PATHS environment variables.',
+              text: 'Error: No paths configured. Set SIGMA_PATHS, SPLUNK_PATHS, ELASTIC_PATHS, and/or KQL_PATHS environment variables.',
             }],
           };
         }
@@ -810,7 +1055,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Recreate DB to apply schema changes
         recreateDb();
         
-        const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS);
+        const result = indexDetections(SIGMA_PATHS, SPLUNK_PATHS, STORY_PATHS, ELASTIC_PATHS, KQL_PATHS);
         return {
           content: [{
             type: 'text',
@@ -819,6 +1064,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               ...result,
               stories_note: STORY_PATHS.length === 0 ? 'No STORY_PATHS configured - stories not indexed' : undefined,
               elastic_note: ELASTIC_PATHS.length === 0 ? 'No ELASTIC_PATHS configured - Elastic rules not indexed' : undefined,
+              kql_note: KQL_PATHS.length === 0 ? 'No KQL_PATHS configured - KQL queries not indexed' : undefined,
               db_path: getDbPath(),
             }, null, 2),
           }],
@@ -841,6 +1087,104 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{
             type: 'text',
             text: yaml,
+          }],
+        };
+      }
+      
+      case 'get_technique_ids': {
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic' | undefined;
+        const tactic = args?.tactic as string | undefined;
+        const severity = args?.severity as string | undefined;
+        
+        const techniqueIds = getTechniqueIds({
+          source_type: sourceType,
+          tactic,
+          severity,
+        });
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: techniqueIds.length,
+              technique_ids: techniqueIds,
+            }, null, 2),
+          }],
+        };
+      }
+      
+      case 'generate_navigator_layer': {
+        const name = args?.name as string;
+        const description = args?.description as string | undefined;
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic' | undefined;
+        const tactic = args?.tactic as string | undefined;
+        const severity = args?.severity as string | undefined;
+        
+        if (!name) {
+          return { content: [{ type: 'text', text: 'Error: name is required' }] };
+        }
+        
+        const layer = generateNavigatorLayer({
+          name,
+          description,
+          source_type: sourceType,
+          tactic,
+          severity,
+        });
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(layer, null, 2),
+          }],
+        };
+      }
+      
+      case 'analyze_coverage': {
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic' | undefined;
+        
+        const report = analyzeCoverage(sourceType);
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(report, null, 2),
+          }],
+        };
+      }
+      
+      case 'identify_gaps': {
+        const threatProfile = args?.threat_profile as string;
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic' | undefined;
+        
+        if (!threatProfile) {
+          return { content: [{ type: 'text', text: 'Error: threat_profile is required' }] };
+        }
+        
+        const gaps = identifyGaps(threatProfile, sourceType);
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(gaps, null, 2),
+          }],
+        };
+      }
+      
+      case 'suggest_detections': {
+        const techniqueId = args?.technique_id as string;
+        const sourceType = args?.source_type as 'sigma' | 'splunk_escu' | 'elastic' | undefined;
+        
+        if (!techniqueId) {
+          return { content: [{ type: 'text', text: 'Error: technique_id is required' }] };
+        }
+        
+        const suggestions = suggestDetections(techniqueId, sourceType);
+        
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(suggestions, null, 2),
           }],
         };
       }

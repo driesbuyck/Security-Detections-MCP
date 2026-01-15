@@ -204,6 +204,10 @@ export function parseSplunkFile(filePath: string): Detection | null {
       file_paths: extractFilePaths(rule.search),
       registry_paths: extractRegistryPaths(rule.search),
       mitre_tactics: extractMitreTactics(rule.tags?.mitre_attack_id),
+      platforms: [],
+      kql_category: null,
+      kql_tags: [],
+      kql_keywords: [],
     };
     
     return detection;

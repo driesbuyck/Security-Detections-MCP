@@ -416,6 +416,10 @@ export function parseSigmaFile(filePath: string): Detection | null {
       file_paths: extractFilePaths(rule.detection),
       registry_paths: extractRegistryPaths(rule.detection),
       mitre_tactics: extractMitreTactics(rule.tags),
+      platforms: rule.logsource.product ? [rule.logsource.product] : [],
+      kql_category: null,
+      kql_tags: [],
+      kql_keywords: [],
     };
     
     return detection;

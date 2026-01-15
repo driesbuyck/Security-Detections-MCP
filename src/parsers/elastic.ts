@@ -250,6 +250,10 @@ export function parseElasticFile(filePath: string): Detection | null {
       file_paths: extractFilePaths(rule.rule.query),
       registry_paths: extractRegistryPaths(rule.rule.query),
       mitre_tactics: extractMitreTactics(threats),
+      platforms: [],
+      kql_category: null,
+      kql_tags: [],
+      kql_keywords: [],
     };
     
     return detection;

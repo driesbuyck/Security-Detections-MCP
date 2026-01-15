@@ -1,7 +1,7 @@
 {
   "name": "security-detections-mcp",
-  "version": "1.1.0",
-  "description": "MCP server for querying Sigma and Splunk ESCU security detection rules",
+  "version": "1.2.0",
+  "description": "MCP server for querying Sigma, Splunk ESCU, Elastic, and KQL security detection rules",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -28,6 +28,11 @@
     "sigma",
     "splunk",
     "escu",
+    "elastic",
+    "kql",
+    "kusto",
+    "defender",
+    "sentinel",
     "siem",
     "mitre",
     "attack"

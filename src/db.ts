@@ -54,7 +54,11 @@ export function initDb(): Database.Database {
       process_names TEXT,
       file_paths TEXT,
       registry_paths TEXT,
-      mitre_tactics TEXT
+      mitre_tactics TEXT,
+      platforms TEXT,
+      kql_category TEXT,
+      kql_tags TEXT,
+      kql_keywords TEXT
     )
   `);
   
@@ -74,6 +78,10 @@ export function initDb(): Database.Database {
       file_paths,
       registry_paths,
       mitre_tactics,
+      platforms,
+      kql_category,
+      kql_tags,
+      kql_keywords,
       content='detections',
       content_rowid='rowid'
     )
@@ -82,24 +90,24 @@ export function initDb(): Database.Database {
   // Create triggers to keep FTS in sync
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS detections_ai AFTER INSERT ON detections BEGIN
-      INSERT INTO detections_fts(rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics)
-      VALUES (NEW.rowid, NEW.id, NEW.name, NEW.description, NEW.query, NEW.mitre_ids, NEW.tags, NEW.cves, NEW.analytic_stories, NEW.data_sources, NEW.process_names, NEW.file_paths, NEW.registry_paths, NEW.mitre_tactics);
+      INSERT INTO detections_fts(rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics, platforms, kql_category, kql_tags, kql_keywords)
+      VALUES (NEW.rowid, NEW.id, NEW.name, NEW.description, NEW.query, NEW.mitre_ids, NEW.tags, NEW.cves, NEW.analytic_stories, NEW.data_sources, NEW.process_names, NEW.file_paths, NEW.registry_paths, NEW.mitre_tactics, NEW.platforms, NEW.kql_category, NEW.kql_tags, NEW.kql_keywords);
     END
   `);
   
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS detections_ad AFTER DELETE ON detections BEGIN
-      INSERT INTO detections_fts(detections_fts, rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics)
-      VALUES ('delete', OLD.rowid, OLD.id, OLD.name, OLD.description, OLD.query, OLD.mitre_ids, OLD.tags, OLD.cves, OLD.analytic_stories, OLD.data_sources, OLD.process_names, OLD.file_paths, OLD.registry_paths, OLD.mitre_tactics);
+      INSERT INTO detections_fts(detections_fts, rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics, platforms, kql_category, kql_tags, kql_keywords)
+      VALUES ('delete', OLD.rowid, OLD.id, OLD.name, OLD.description, OLD.query, OLD.mitre_ids, OLD.tags, OLD.cves, OLD.analytic_stories, OLD.data_sources, OLD.process_names, OLD.file_paths, OLD.registry_paths, OLD.mitre_tactics, OLD.platforms, OLD.kql_category, OLD.kql_tags, OLD.kql_keywords);
     END
   `);
   
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS detections_au AFTER UPDATE ON detections BEGIN
-      INSERT INTO detections_fts(detections_fts, rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics)
-      VALUES ('delete', OLD.rowid, OLD.id, OLD.name, OLD.description, OLD.query, OLD.mitre_ids, OLD.tags, OLD.cves, OLD.analytic_stories, OLD.data_sources, OLD.process_names, OLD.file_paths, OLD.registry_paths, OLD.mitre_tactics);
-      INSERT INTO detections_fts(rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics)
-      VALUES (NEW.rowid, NEW.id, NEW.name, NEW.description, NEW.query, NEW.mitre_ids, NEW.tags, NEW.cves, NEW.analytic_stories, NEW.data_sources, NEW.process_names, NEW.file_paths, NEW.registry_paths, NEW.mitre_tactics);
+      INSERT INTO detections_fts(detections_fts, rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics, platforms, kql_category, kql_tags, kql_keywords)
+      VALUES ('delete', OLD.rowid, OLD.id, OLD.name, OLD.description, OLD.query, OLD.mitre_ids, OLD.tags, OLD.cves, OLD.analytic_stories, OLD.data_sources, OLD.process_names, OLD.file_paths, OLD.registry_paths, OLD.mitre_tactics, OLD.platforms, OLD.kql_category, OLD.kql_tags, OLD.kql_keywords);
+      INSERT INTO detections_fts(rowid, id, name, description, query, mitre_ids, tags, cves, analytic_stories, data_sources, process_names, file_paths, registry_paths, mitre_tactics, platforms, kql_category, kql_tags, kql_keywords)
+      VALUES (NEW.rowid, NEW.id, NEW.name, NEW.description, NEW.query, NEW.mitre_ids, NEW.tags, NEW.cves, NEW.analytic_stories, NEW.data_sources, NEW.process_names, NEW.file_paths, NEW.registry_paths, NEW.mitre_tactics, NEW.platforms, NEW.kql_category, NEW.kql_tags, NEW.kql_keywords);
     END
   `);
   
@@ -111,6 +119,7 @@ export function initDb(): Database.Database {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_detection_type ON detections(detection_type)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_asset_type ON detections(asset_type)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_security_domain ON detections(security_domain)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_kql_category ON detections(kql_category)`);
   
   // Create stories table (optional - provides rich context for analytic stories)
   db.exec(`
@@ -189,8 +198,8 @@ export function insertDetection(detection: Detection): void {
      logsource_product, logsource_service, severity, status, author, 
      date_created, date_modified, refs, falsepositives, tags, file_path, raw_yaml,
      cves, analytic_stories, data_sources, detection_type, asset_type, security_domain,
-     process_names, file_paths, registry_paths, mitre_tactics)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     process_names, file_paths, registry_paths, mitre_tactics, platforms, kql_category, kql_tags, kql_keywords)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   stmt.run(
@@ -222,7 +231,11 @@ export function insertDetection(detection: Detection): void {
     JSON.stringify(detection.process_names),
     JSON.stringify(detection.file_paths),
     JSON.stringify(detection.registry_paths),
-    JSON.stringify(detection.mitre_tactics)
+    JSON.stringify(detection.mitre_tactics),
+    JSON.stringify(detection.platforms),
+    detection.kql_category,
+    JSON.stringify(detection.kql_tags),
+    JSON.stringify(detection.kql_keywords)
   );
 }
 
@@ -232,7 +245,7 @@ function rowToDetection(row: Record<string, unknown>): Detection {
     name: row.name as string,
     description: row.description as string || '',
     query: row.query as string || '',
-    source_type: row.source_type as 'sigma' | 'splunk_escu',
+    source_type: row.source_type as 'sigma' | 'splunk_escu' | 'elastic' | 'kql',
     mitre_ids: JSON.parse(row.mitre_ids as string || '[]'),
     logsource_category: row.logsource_category as string | null,
     logsource_product: row.logsource_product as string | null,
@@ -257,6 +270,10 @@ function rowToDetection(row: Record<string, unknown>): Detection {
     file_paths: JSON.parse(row.file_paths as string || '[]'),
     registry_paths: JSON.parse(row.registry_paths as string || '[]'),
     mitre_tactics: JSON.parse(row.mitre_tactics as string || '[]'),
+    platforms: JSON.parse(row.platforms as string || '[]'),
+    kql_category: row.kql_category as string | null,
+    kql_tags: JSON.parse(row.kql_tags as string || '[]'),
+    kql_keywords: JSON.parse(row.kql_keywords as string || '[]'),
   };
 }
 
@@ -294,7 +311,7 @@ export function listDetections(limit: number = 100, offset: number = 0): Detecti
   return rows.map(rowToDetection);
 }
 
-export function listBySource(sourceType: 'sigma' | 'splunk_escu' | 'elastic', limit: number = 100, offset: number = 0): Detection[] {
+export function listBySource(sourceType: 'sigma' | 'splunk_escu' | 'elastic' | 'kql', limit: number = 100, offset: number = 0): Detection[] {
   const database = initDb();
   
   const stmt = database.prepare('SELECT * FROM detections WHERE source_type = ? ORDER BY name LIMIT ? OFFSET ?');
@@ -428,6 +445,48 @@ export function listByDataSource(dataSource: string, limit: number = 100, offset
   return rows.map(rowToDetection);
 }
 
+export function listByKqlCategory(category: string, limit: number = 100, offset: number = 0): Detection[] {
+  const database = initDb();
+  
+  const stmt = database.prepare(`
+    SELECT * FROM detections
+    WHERE source_type = 'kql' AND kql_category = ?
+    ORDER BY name
+    LIMIT ? OFFSET ?
+  `);
+  const rows = stmt.all(category, limit, offset) as Record<string, unknown>[];
+  
+  return rows.map(rowToDetection);
+}
+
+export function listByKqlTag(tag: string, limit: number = 100, offset: number = 0): Detection[] {
+  const database = initDb();
+  
+  const stmt = database.prepare(`
+    SELECT * FROM detections
+    WHERE source_type = 'kql' AND kql_tags LIKE ?
+    ORDER BY name
+    LIMIT ? OFFSET ?
+  `);
+  const rows = stmt.all(`%"${tag}"%`, limit, offset) as Record<string, unknown>[];
+  
+  return rows.map(rowToDetection);
+}
+
+export function listByKqlDatasource(dataSource: string, limit: number = 100, offset: number = 0): Detection[] {
+  const database = initDb();
+  
+  const stmt = database.prepare(`
+    SELECT * FROM detections
+    WHERE source_type = 'kql' AND data_sources LIKE ?
+    ORDER BY name
+    LIMIT ? OFFSET ?
+  `);
+  const rows = stmt.all(`%${dataSource}%`, limit, offset) as Record<string, unknown>[];
+  
+  return rows.map(rowToDetection);
+}
+
 export function listByMitreTactic(tactic: string, limit: number = 100, offset: number = 0): Detection[] {
   const database = initDb();
   
@@ -449,6 +508,7 @@ export function getStats(): IndexStats {
   const sigma = (database.prepare("SELECT COUNT(*) as count FROM detections WHERE source_type = 'sigma'").get() as { count: number }).count;
   const splunk = (database.prepare("SELECT COUNT(*) as count FROM detections WHERE source_type = 'splunk_escu'").get() as { count: number }).count;
   const elastic = (database.prepare("SELECT COUNT(*) as count FROM detections WHERE source_type = 'elastic'").get() as { count: number }).count;
+  const kql = (database.prepare("SELECT COUNT(*) as count FROM detections WHERE source_type = 'kql'").get() as { count: number }).count;
   
   // Count by severity
   const severityRows = database.prepare(`
@@ -538,6 +598,7 @@ export function getStats(): IndexStats {
     sigma,
     splunk_escu: splunk,
     elastic,
+    kql,
     by_severity,
     by_logsource_product,
     mitre_coverage,
@@ -682,4 +743,391 @@ export function getStoryCount(): number {
   } catch {
     return 0;
   }
+}
+
+// Lightweight technique ID extraction - returns ONLY unique technique IDs
+export interface TechniqueIdFilters {
+  source_type?: 'sigma' | 'splunk_escu' | 'elastic';
+  tactic?: string;
+  severity?: string;
+}
+
+export function getTechniqueIds(filters: TechniqueIdFilters = {}): string[] {
+  const database = initDb();
+  
+  let sql = "SELECT DISTINCT mitre_ids FROM detections WHERE mitre_ids != '[]' AND mitre_ids IS NOT NULL";
+  const params: string[] = [];
+  
+  if (filters.source_type) {
+    sql += ' AND source_type = ?';
+    params.push(filters.source_type);
+  }
+  if (filters.tactic) {
+    sql += ' AND mitre_tactics LIKE ?';
+    params.push(`%"${filters.tactic}"%`);
+  }
+  if (filters.severity) {
+    sql += ' AND severity = ?';
+    params.push(filters.severity);
+  }
+  
+  const stmt = database.prepare(sql);
+  const rows = stmt.all(...params) as { mitre_ids: string }[];
+  
+  // Extract and dedupe all technique IDs
+  const techniqueSet = new Set<string>();
+  for (const row of rows) {
+    const ids = JSON.parse(row.mitre_ids) as string[];
+    for (const id of ids) {
+      techniqueSet.add(id);
+    }
+  }
+  
+  return Array.from(techniqueSet).sort();
+}
+
+// Threat profiles for gap analysis
+const THREAT_PROFILES: Record<string, string[]> = {
+  ransomware: [
+    'T1486', 'T1490', 'T1027', 'T1547.001', 'T1059.001', 'T1059.003',
+    'T1562.001', 'T1112', 'T1070.004', 'T1048', 'T1567', 'T1078',
+    'T1566.001', 'T1204.002', 'T1055', 'T1543.003'
+  ],
+  apt: [
+    'T1003.001', 'T1003.002', 'T1003.003', 'T1021.001', 'T1021.002',
+    'T1053.005', 'T1071.001', 'T1071.004', 'T1105', 'T1027', 'T1055',
+    'T1078', 'T1136', 'T1098', 'T1087', 'T1069', 'T1018', 'T1082'
+  ],
+  'initial-access': [
+    'T1566.001', 'T1566.002', 'T1190', 'T1078', 'T1133', 'T1200',
+    'T1091', 'T1195.002', 'T1199', 'T1189'
+  ],
+  persistence: [
+    'T1547.001', 'T1547.004', 'T1543.003', 'T1053.005', 'T1136.001',
+    'T1098', 'T1505.003', 'T1546.001', 'T1574.001', 'T1574.002'
+  ],
+  'credential-access': [
+    'T1003.001', 'T1003.002', 'T1003.003', 'T1003.004', 'T1003.006',
+    'T1555', 'T1552.001', 'T1110', 'T1558.003', 'T1539', 'T1606.001'
+  ],
+  'defense-evasion': [
+    'T1027', 'T1070.001', 'T1070.004', 'T1055', 'T1036', 'T1562.001',
+    'T1218', 'T1112', 'T1140', 'T1202', 'T1564.001'
+  ]
+};
+
+// Coverage analysis result
+export interface CoverageReport {
+  summary: {
+    total_techniques: number;
+    total_detections: number;
+    coverage_by_tactic: Record<string, { covered: number; total: number; percent: number }>;
+  };
+  top_covered: Array<{ technique: string; detection_count: number }>;
+  weak_coverage: Array<{ technique: string; detection_count: number }>;
+}
+
+// Analyze coverage efficiently
+export function analyzeCoverage(sourceType?: 'sigma' | 'splunk_escu' | 'elastic'): CoverageReport {
+  const database = initDb();
+  
+  // Get all technique IDs covered
+  let countSql = 'SELECT COUNT(DISTINCT id) as count FROM detections';
+  if (sourceType) countSql += ' WHERE source_type = ?';
+  const totalDetections = sourceType 
+    ? (database.prepare(countSql).get(sourceType) as { count: number }).count
+    : (database.prepare(countSql).get() as { count: number }).count;
+  
+  // Get techniques with counts
+  let sql = "SELECT mitre_ids, mitre_tactics FROM detections WHERE mitre_ids != '[]'";
+  if (sourceType) sql += ' AND source_type = ?';
+  
+  const rows = sourceType
+    ? database.prepare(sql).all(sourceType) as { mitre_ids: string; mitre_tactics: string }[]
+    : database.prepare(sql).all() as { mitre_ids: string; mitre_tactics: string }[];
+  
+  // Count techniques and tactics
+  const techCounts: Record<string, number> = {};
+  const tacticCounts: Record<string, Set<string>> = {};
+  
+  const allTactics = [
+    'reconnaissance', 'resource-development', 'initial-access', 'execution',
+    'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+    'discovery', 'lateral-movement', 'collection', 'command-and-control',
+    'exfiltration', 'impact'
+  ];
+  
+  for (const t of allTactics) {
+    tacticCounts[t] = new Set();
+  }
+  
+  for (const row of rows) {
+    const ids = JSON.parse(row.mitre_ids) as string[];
+    const tactics = JSON.parse(row.mitre_tactics || '[]') as string[];
+    
+    for (const id of ids) {
+      techCounts[id] = (techCounts[id] || 0) + 1;
+      for (const tactic of tactics) {
+        if (tacticCounts[tactic]) {
+          tacticCounts[tactic].add(id);
+        }
+      }
+    }
+  }
+  
+  // Build coverage by tactic (approx totals from ATT&CK)
+  const tacticTotals: Record<string, number> = {
+    'reconnaissance': 10, 'resource-development': 8, 'initial-access': 10,
+    'execution': 14, 'persistence': 20, 'privilege-escalation': 14,
+    'defense-evasion': 43, 'credential-access': 17, 'discovery': 31,
+    'lateral-movement': 9, 'collection': 17, 'command-and-control': 18,
+    'exfiltration': 9, 'impact': 14
+  };
+  
+  const coverageByTactic: Record<string, { covered: number; total: number; percent: number }> = {};
+  for (const tactic of allTactics) {
+    const covered = tacticCounts[tactic].size;
+    const total = tacticTotals[tactic];
+    coverageByTactic[tactic] = {
+      covered,
+      total,
+      percent: Math.round((covered / total) * 100)
+    };
+  }
+  
+  // Top covered and weak coverage
+  const sorted = Object.entries(techCounts).sort((a, b) => b[1] - a[1]);
+  const topCovered = sorted.slice(0, 10).map(([t, c]) => ({ technique: t, detection_count: c }));
+  const weakCoverage = sorted.filter(([_, c]) => c === 1).slice(0, 10).map(([t, c]) => ({ technique: t, detection_count: c }));
+  
+  return {
+    summary: {
+      total_techniques: Object.keys(techCounts).length,
+      total_detections: totalDetections,
+      coverage_by_tactic: coverageByTactic,
+    },
+    top_covered: topCovered,
+    weak_coverage: weakCoverage,
+  };
+}
+
+// Gap analysis result
+export interface GapAnalysis {
+  threat_profile: string;
+  total_gaps: number;
+  critical_gaps: Array<{ technique: string; priority: string; reason: string }>;
+  covered: string[];
+  recommendations: string[];
+}
+
+// Identify gaps based on threat profile
+export function identifyGaps(
+  threatProfile: string,
+  sourceType?: 'sigma' | 'splunk_escu' | 'elastic'
+): GapAnalysis {
+  const targetTechniques = THREAT_PROFILES[threatProfile.toLowerCase()] || THREAT_PROFILES['apt'];
+  
+  // Get what we have coverage for
+  const coveredTechs = new Set(getTechniqueIds({ source_type: sourceType }));
+  
+  // Find gaps
+  const gaps: Array<{ technique: string; priority: string; reason: string }> = [];
+  const covered: string[] = [];
+  
+  for (const tech of targetTechniques) {
+    if (coveredTechs.has(tech)) {
+      covered.push(tech);
+    } else {
+      // Check if we have sub-technique coverage
+      const hasSubCoverage = Array.from(coveredTechs).some(t => t.startsWith(tech + '.'));
+      const hasParentCoverage = coveredTechs.has(tech.split('.')[0]);
+      
+      let priority = 'P0';
+      let reason = 'No detection coverage';
+      
+      if (hasSubCoverage) {
+        priority = 'P2';
+        reason = 'Has sub-technique coverage but not parent';
+      } else if (hasParentCoverage) {
+        priority = 'P1';
+        reason = 'Has parent technique coverage, may catch this';
+      }
+      
+      gaps.push({ technique: tech, priority, reason });
+    }
+  }
+  
+  // Sort by priority
+  gaps.sort((a, b) => a.priority.localeCompare(b.priority));
+  
+  // Generate recommendations
+  const recommendations = [
+    `${covered.length}/${targetTechniques.length} techniques covered for ${threatProfile}`,
+    `${gaps.filter(g => g.priority === 'P0').length} critical gaps (P0) need immediate attention`,
+  ];
+  
+  if (gaps.length > 0) {
+    recommendations.push(`Top priority: ${gaps[0].technique} - ${gaps[0].reason}`);
+  }
+  
+  return {
+    threat_profile: threatProfile,
+    total_gaps: gaps.length,
+    critical_gaps: gaps.slice(0, 15),
+    covered,
+    recommendations,
+  };
+}
+
+// Detection suggestion
+export interface DetectionSuggestion {
+  technique_id: string;
+  existing_detections: Array<{ id: string; name: string; source: string }>;
+  data_sources_needed: string[];
+  detection_ideas: string[];
+}
+
+// Suggest detections for a technique
+export function suggestDetections(
+  techniqueId: string,
+  sourceType?: 'sigma' | 'splunk_escu' | 'elastic'
+): DetectionSuggestion {
+  const database = initDb();
+  
+  // Find existing detections for this technique
+  let sql = "SELECT id, name, source_type, data_sources FROM detections WHERE mitre_ids LIKE ?";
+  const params: string[] = [`%"${techniqueId}"%`];
+  
+  if (sourceType) {
+    sql += ' AND source_type = ?';
+    params.push(sourceType);
+  }
+  sql += ' LIMIT 10';
+  
+  const rows = database.prepare(sql).all(...params) as { 
+    id: string; name: string; source_type: string; data_sources: string 
+  }[];
+  
+  const existingDetections = rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    source: r.source_type
+  }));
+  
+  // Collect data sources from existing detections
+  const dataSources = new Set<string>();
+  for (const row of rows) {
+    const ds = JSON.parse(row.data_sources || '[]') as string[];
+    ds.forEach(d => dataSources.add(d));
+  }
+  
+  // Generate detection ideas based on technique pattern
+  const ideas: string[] = [];
+  const techBase = techniqueId.split('.')[0];
+  
+  const ideaMap: Record<string, string[]> = {
+    'T1059': ['Monitor process creation for script interpreters', 'Track command-line arguments for encoded commands', 'Alert on unusual parent-child process relationships'],
+    'T1003': ['Monitor LSASS access patterns', 'Track credential dumping tool signatures', 'Alert on suspicious memory access'],
+    'T1547': ['Monitor registry run key modifications', 'Track startup folder changes', 'Alert on new autostart entries'],
+    'T1055': ['Monitor for CreateRemoteThread', 'Track process injection patterns', 'Alert on memory allocation in remote processes'],
+    'T1027': ['Detect encoded/obfuscated scripts', 'Monitor for packed executables', 'Track file entropy anomalies'],
+    'T1071': ['Monitor for beaconing patterns', 'Track DNS query anomalies', 'Alert on unusual HTTP/S traffic'],
+    'T1486': ['Monitor for mass file modifications', 'Track encryption-related API calls', 'Alert on ransom note creation'],
+    'T1490': ['Monitor vssadmin/wbadmin usage', 'Track backup deletion attempts', 'Alert on bcdedit modifications'],
+  };
+  
+  ideas.push(...(ideaMap[techBase] || ['Review MITRE ATT&CK for detection guidance', 'Check data source requirements', 'Consider behavioral vs signature detection']));
+  
+  return {
+    technique_id: techniqueId,
+    existing_detections: existingDetections,
+    data_sources_needed: Array.from(dataSources).slice(0, 10),
+    detection_ideas: ideas,
+  };
+}
+
+// Generate Navigator layer directly from detections
+export interface NavigatorLayerOptions {
+  name: string;
+  description?: string;
+  source_type?: 'sigma' | 'splunk_escu' | 'elastic';
+  tactic?: string;
+  severity?: string;
+}
+
+export function generateNavigatorLayer(options: NavigatorLayerOptions): object {
+  const techniqueIds = getTechniqueIds({
+    source_type: options.source_type,
+    tactic: options.tactic,
+    severity: options.severity,
+  });
+  
+  // Build techniques array with scores based on detection count
+  const database = initDb();
+  const techniques = [];
+  
+  // Color gradient: red (no coverage) -> yellow (low) -> green (good)
+  function getColorForScore(score: number): string {
+    if (score >= 80) return '#1a8c1a';  // Dark green - excellent
+    if (score >= 60) return '#8ec843';  // Light green - good
+    if (score >= 40) return '#ffe766';  // Yellow - moderate
+    if (score >= 20) return '#ff9933';  // Orange - low
+    return '#ff6666';                    // Red - minimal
+  }
+  
+  for (const techId of techniqueIds) {
+    let countSql = 'SELECT COUNT(*) as count FROM detections WHERE mitre_ids LIKE ?';
+    const countParams: string[] = [`%"${techId}"%`];
+    
+    if (options.source_type) {
+      countSql += ' AND source_type = ?';
+      countParams.push(options.source_type);
+    }
+    if (options.tactic) {
+      countSql += ' AND mitre_tactics LIKE ?';
+      countParams.push(`%"${options.tactic}"%`);
+    }
+    
+    const count = (database.prepare(countSql).get(...countParams) as { count: number }).count;
+    const score = Math.min(count * 20, 100); // Scale: 1 detection = 20, max 100
+    
+    techniques.push({
+      techniqueID: techId,
+      score,
+      comment: `${count} detection(s)`,
+      color: getColorForScore(score),
+      enabled: true,
+      showSubtechniques: false,
+    });
+  }
+  
+  // ATT&CK Navigator layer format
+  return {
+    name: options.name,
+    versions: {
+      attack: '18',
+      navigator: '5.1.0',
+      layer: '4.5',
+    },
+    domain: 'enterprise-attack',
+    description: options.description || `Generated from ${techniqueIds.length} techniques`,
+    filters: { platforms: ['Windows', 'Linux', 'macOS'] },
+    sorting: 0,
+    layout: { layout: 'side', aggregateFunction: 'average', showID: true, showName: true },
+    hideDisabled: false,
+    techniques,
+    gradient: {
+      colors: ['#ff6666', '#ffe766', '#8ec843'],
+      minValue: 0,
+      maxValue: 100,
+    },
+    legendItems: [],
+    metadata: [],
+    links: [],
+    showTacticRowBackground: false,
+    tacticRowBackground: '#dddddd',
+    selectTechniquesAcrossTactics: true,
+    selectSubtechniquesWithParent: false,
+    selectVisibleTechniques: false,
+  };
 }

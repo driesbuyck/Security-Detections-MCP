@@ -5,7 +5,7 @@ export interface Detection {
   name: string;
   description: string;
   query: string; // detection logic (YAML for Sigma, SPL for Splunk, EQL/KQL for Elastic)
-  source_type: 'sigma' | 'splunk_escu' | 'elastic';
+  source_type: 'sigma' | 'splunk_escu' | 'elastic' | 'kql';
   mitre_ids: string[];
   logsource_category: string | null;
   logsource_product: string | null;
@@ -32,6 +32,10 @@ export interface Detection {
   file_paths: string[];              // Interesting file paths referenced (C:\Windows\Temp, etc)
   registry_paths: string[];          // Registry paths referenced
   mitre_tactics: string[];           // MITRE tactics extracted from tags (execution, persistence, etc)
+  platforms: string[];               // Platforms extracted from metadata (windows, linux, azure, etc.)
+  kql_category: string | null;       // Category derived from path (e.g., "Defender For Endpoint")
+  kql_tags: string[];                // Tags/keywords extracted from KQL markdown or metadata
+  kql_keywords: string[];            // Lightweight extracted keywords for search
 }
 
 // Sigma rule structure based on official schema
@@ -93,6 +97,7 @@ export interface IndexStats {
   sigma: number;
   splunk_escu: number;
   elastic: number;
+  kql: number;
   by_severity: Record<string, number>;
   by_logsource_product: Record<string, number>;
   mitre_coverage: number;
