@@ -188,6 +188,7 @@ git clone https://github.com/jkerai1/KQL-Queries.git
 | `list_by_detection_type(type)` | Filter by type (TTP, Anomaly, Hunting, Correlation) |
 | `list_by_analytic_story(story)` | Filter by Splunk analytic story |
 | `list_by_source_path(path_pattern)` | Filter detections by source file path (e.g., filter NVISO rules vs public Sigma rules) |
+| `search_by_source_path(query, path_pattern, limit)` | Full-text search filtered by file path pattern (e.g., search for "powershell" only within NVISO rules) |
 
 ### KQL-Specific Filters
 
@@ -243,6 +244,47 @@ AI uses skills + efficient tools:
 3. suggest_detections(technique_id="T1486")    → Fix top gap
 
 Total: ~5KB of data vs ~500KB with traditional tools
+```
+
+## When to Use Which Search Tool
+
+**Use `search(query)`** when:
+- You want to search across ALL detection sources (Sigma, Splunk, Elastic, KQL)
+- You're doing broad research without caring about the source repository
+- Example: "Find all detections mentioning CVE-2024-27198"
+
+**Use `list_by_source_path(path_pattern)`** when:
+- You want ALL detections from a specific repository or directory
+- You're exploring what's available in a particular source
+- Example: "Show me all rules from the NVISO private repo"
+- ⚠️ Warning: Can return large result sets (100+ detections)
+
+**Use `search_by_source_path(query, path_pattern)`** when:
+- You want targeted search within a specific repository or directory
+- You're comparing detection coverage between different sources
+- You want to reduce noise from irrelevant repositories
+- Example: "Find powershell detections in NVISO rules only"
+- Example: "Search for lateral movement techniques in threat-hunting rules"
+- ✅ Recommended for most repository-specific queries (more efficient than `list_by_source_path`)
+
+**Examples:**
+
+```python
+# Broad search - all sources
+search("T1059.001")
+
+# All rules from jkerai1's repo (potentially 420+ results!)
+list_by_source_path("jkerai1")
+
+# Targeted search - powershell in jkerai1's repo only (5-10 results)
+search_by_source_path("powershell", "jkerai1")
+
+# Compare NVISO vs public Sigma for a technique
+search_by_source_path("T1003.001", "nviso")
+search_by_source_path("T1003.001", "SigmaHQ/sigma")
+
+# Find CVEs in threat-hunting rules specifically
+search_by_source_path("CVE-2024", "rules-threat-hunting")
 ```
 
 ## Example Workflows

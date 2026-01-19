@@ -505,6 +505,26 @@ export function listBySourcePath(
   return rows.map(rowToDetection);
 }
 
+export function searchBySourcePath(
+  query: string,
+  pathPattern: string,
+  limit: number = 50
+): Detection[] {
+  const database = initDb();
+
+  // Combine FTS5 search with path filtering
+  const stmt = database.prepare(`
+    SELECT d.* FROM detections d
+    JOIN detections_fts fts ON d.rowid = fts.rowid
+    WHERE detections_fts MATCH ? AND d.file_path LIKE ?
+    ORDER BY rank
+    LIMIT ?
+  `);
+
+  const rows = stmt.all(query, `%${pathPattern}%`, limit) as Record<string, unknown>[];
+  return rows.map(rowToDetection);
+}
+
 export function listByMitreTactic(tactic: string, limit: number = 100, offset: number = 0): Detection[] {
   const database = initDb();
   
