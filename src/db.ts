@@ -475,7 +475,7 @@ export function listByKqlTag(tag: string, limit: number = 100, offset: number = 
 
 export function listByKqlDatasource(dataSource: string, limit: number = 100, offset: number = 0): Detection[] {
   const database = initDb();
-  
+
   const stmt = database.prepare(`
     SELECT * FROM detections
     WHERE source_type = 'kql' AND data_sources LIKE ?
@@ -483,7 +483,25 @@ export function listByKqlDatasource(dataSource: string, limit: number = 100, off
     LIMIT ? OFFSET ?
   `);
   const rows = stmt.all(`%${dataSource}%`, limit, offset) as Record<string, unknown>[];
-  
+
+  return rows.map(rowToDetection);
+}
+
+export function listBySourcePath(
+  pathPattern: string,
+  limit: number = 100,
+  offset: number = 0
+): Detection[] {
+  const database = initDb();
+
+  const stmt = database.prepare(`
+    SELECT * FROM detections
+    WHERE file_path LIKE ?
+    ORDER BY name
+    LIMIT ? OFFSET ?
+  `);
+  const rows = stmt.all(`%${pathPattern}%`, limit, offset) as Record<string, unknown>[];
+
   return rows.map(rowToDetection);
 }
 
