@@ -24,6 +24,7 @@ import {
   listByKqlCategory,
   listByKqlTag,
   listByKqlDatasource,
+  listBySourcePath,
   getStats,
   getRawYaml,
   getDbPath,
@@ -437,6 +438,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['data_source'],
+        },
+      },
+      {
+        name: 'list_by_source_path',
+        description: 'List detections filtered by source file path pattern. Use this to query rules from specific repositories or directories (e.g., filter NVISO rules vs public Sigma rules).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path_pattern: {
+              type: 'string',
+              description: 'Path pattern to match (substring search). Examples: "nviso", "/Users/driesb/Security/nviso/", "rules-threat-hunting", "security_content/detections"',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 100)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Offset for pagination (default 0)',
+            },
+          },
+          required: ['path_pattern'],
         },
       },
       {
@@ -934,11 +957,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const dataSource = args?.data_source as string;
         const limit = (args?.limit as number) || 100;
         const offset = (args?.offset as number) || 0;
-        
+
         if (!dataSource) {
           return { content: [{ type: 'text', text: 'Error: data_source is required' }] };
         }
-        
+
         const results = listByKqlDatasource(dataSource, limit, offset);
         return {
           content: [{
@@ -947,7 +970,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }],
         };
       }
-      
+
+      case 'list_by_source_path': {
+        const pathPattern = args?.path_pattern as string;
+        const limit = (args?.limit as number) || 100;
+        const offset = (args?.offset as number) || 0;
+
+        if (!pathPattern) {
+          return { content: [{ type: 'text', text: 'Error: path_pattern is required' }] };
+        }
+
+        const results = listBySourcePath(pathPattern, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+
       case 'search_stories': {
         const query = args?.query as string;
         const limit = (args?.limit as number) || 20;

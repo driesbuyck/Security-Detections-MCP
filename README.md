@@ -187,6 +187,7 @@ git clone https://github.com/jkerai1/KQL-Queries.git
 | `list_by_severity(level)` | Filter by severity (informational/low/medium/high/critical) |
 | `list_by_detection_type(type)` | Filter by type (TTP, Anomaly, Hunting, Correlation) |
 | `list_by_analytic_story(story)` | Filter by Splunk analytic story |
+| `list_by_source_path(path_pattern)` | Filter detections by source file path (e.g., filter NVISO rules vs public Sigma rules) |
 
 ### KQL-Specific Filters
 
@@ -296,6 +297,26 @@ Tool: list_by_kql_category(category="Defender For Endpoint")
 LLM: "Find detections for BloodHound usage"
 Tool: search(query="bloodhound", limit=10)
 → Returns KQL hunting queries and other source detections
+```
+
+### Filter by Source Repository
+
+```
+LLM: "Find me NVISO detection rules"
+Tool: list_by_source_path(path_pattern="nviso")
+→ Returns only detections from NVISO directories
+```
+
+```
+LLM: "What Sigma threat hunting rules do we have?"
+Tool: list_by_source_path(path_pattern="rules-threat-hunting")
+→ Returns only Sigma threat hunting rules
+```
+
+```
+LLM: "Show me rules from the security_content detections folder"
+Tool: list_by_source_path(path_pattern="security_content/detections")
+→ Returns only Splunk ESCU detections
 ```
 
 ## Unified Schema
