@@ -30,6 +30,7 @@ import {
   listByKqlTag,
   listByKqlDatasource,
   listBySourcePath,
+  searchBySourcePath,
   getStats,
   getRawYaml,
   getDbPath,
@@ -158,7 +159,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search',
-        description: 'Full-text search across all detection fields (name, description, query, MITRE IDs, tags, CVEs, analytic stories, process names, file paths, registry paths)',
+        description: 'Full-text search across ALL detection sources and repositories (Sigma, Splunk, Elastic, KQL). Use when doing broad research without caring about specific sources. For repository-specific searches, use search_by_source_path instead.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -507,7 +508,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'list_by_source_path',
-        description: 'List detections filtered by source file path pattern. Use this to query rules from specific repositories or directories (e.g., filter NVISO rules vs public Sigma rules).',
+        description: 'List ALL detections from a specific repository or directory path. WARNING: Can return very large result sets (100+ detections, 400KB+). For targeted queries within a repository, use search_by_source_path instead. Use this only when you need to explore all available rules from a specific source.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -525,6 +526,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['path_pattern'],
+        },
+      },
+      {
+        name: 'search_by_source_path',
+        description: 'Full-text search within a specific repository or directory path. RECOMMENDED for repository-specific queries as it combines semantic search with path filtering, returning only relevant results (vs list_by_source_path which returns ALL detections). Use this to compare coverage between sources or reduce noise from irrelevant repositories.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query (FTS5 syntax supported). Examples: "powershell.exe", "CVE-2024-27198", "credential access", "T1003"',
+            },
+            path_pattern: {
+              type: 'string',
+              description: 'Path pattern to filter by (substring search). Examples: "nviso", "jkerai1", "rules-threat-hunting", "security_content/detections"',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default 50)',
+            },
+          },
+          required: ['query', 'path_pattern'],
         },
       },
       {
@@ -3045,6 +3068,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const results = listBySourcePath(pathPattern, limit, offset);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          }],
+        };
+      }
+
+      case 'search_by_source_path': {
+        const query = args?.query as string;
+        const pathPattern = args?.path_pattern as string;
+        const limit = (args?.limit as number) || 50;
+
+        if (!query) {
+          return { content: [{ type: 'text', text: 'Error: query is required' }] };
+        }
+
+        if (!pathPattern) {
+          return { content: [{ type: 'text', text: 'Error: path_pattern is required' }] };
+        }
+
+        const results = searchBySourcePath(query, pathPattern, limit);
         return {
           content: [{
             type: 'text',
