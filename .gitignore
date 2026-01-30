@@ -27,3 +27,4 @@ detections/
 # npm
 *.tgz
 .npm/
+/reports
