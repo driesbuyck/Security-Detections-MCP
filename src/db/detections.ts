@@ -512,6 +512,52 @@ export function listByMitreTactic(tactic: string, limit: number = 100, offset: n
   return rows.map(rowToDetection);
 }
 
+/**
+ * List detections filtered by source file path pattern.
+ * Useful for querying detections from specific repositories or directories.
+ */
+export function listBySourcePath(
+  pathPattern: string,
+  limit: number = 100,
+  offset: number = 0
+): Detection[] {
+  const database = getDb();
+
+  const stmt = database.prepare(`
+    SELECT * FROM detections
+    WHERE file_path LIKE ?
+    ORDER BY name
+    LIMIT ? OFFSET ?
+  `);
+  const rows = stmt.all(`%${pathPattern}%`, limit, offset) as Record<string, unknown>[];
+
+  return rows.map(rowToDetection);
+}
+
+/**
+ * Search detections with full-text search combined with source path filtering.
+ * Combines FTS5 semantic search with path pattern matching for targeted repository queries.
+ */
+export function searchBySourcePath(
+  query: string,
+  pathPattern: string,
+  limit: number = 50
+): Detection[] {
+  const database = getDb();
+
+  // Combine FTS5 search with path filtering
+  const stmt = database.prepare(`
+    SELECT d.* FROM detections d
+    JOIN detections_fts fts ON d.rowid = fts.rowid
+    WHERE detections_fts MATCH ? AND d.file_path LIKE ?
+    ORDER BY rank
+    LIMIT ?
+  `);
+
+  const rows = stmt.all(query, `%${pathPattern}%`, limit) as Record<string, unknown>[];
+  return rows.map(rowToDetection);
+}
+
 // =============================================================================
 // STATISTICS
 // =============================================================================
