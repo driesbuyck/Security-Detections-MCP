@@ -66,7 +66,9 @@ export {
   listByKqlTag,
   listByKqlDatasource,
   listByMitreTactic,
-  
+  listBySourcePath,
+  searchBySourcePath,
+
   // Statistics
   getStats,
   

@@ -6,6 +6,8 @@ import {
   listDetections,
   getRawYaml,
   validateTechniqueId,
+  listBySourcePath,
+  searchBySourcePath,
 } from '../../db/index.js';
 
 export const searchTools = [
@@ -171,6 +173,105 @@ export const searchTools = [
 
       const results = listDetections(limit, offset);
       return { count: results.length, offset, limit, detections: results };
+    },
+  }),
+
+  defineTool({
+    name: 'list_by_source_path',
+    description: 'List ALL detections from a specific repository or directory path. WARNING: Can return very large result sets (100+ detections, 400KB+). For targeted queries within a repository, use search_by_source_path instead. Use this only when you need to explore all available rules from a specific source.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path_pattern: {
+          type: 'string',
+          description: 'Path pattern to match (substring search). Examples: "nviso", "/Users/driesb/Security/nviso/", "rules-threat-hunting", "security_content/detections"',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max results to return',
+          default: 100,
+          minimum: 1,
+          maximum: 1000,
+        },
+        offset: {
+          type: 'number',
+          description: 'Offset for pagination',
+          default: 0,
+          minimum: 0,
+        },
+      },
+      required: ['path_pattern'],
+    },
+    handler: async (args) => {
+      const pathPattern = args.path_pattern as string;
+      const limit = (args.limit as number) || 100;
+      const offset = (args.offset as number) || 0;
+
+      if (!pathPattern) {
+        return {
+          error: true,
+          code: 'MISSING_REQUIRED_ARG',
+          message: 'path_pattern is required',
+          hint: 'Provide a path substring to filter detections',
+        };
+      }
+
+      const results = listBySourcePath(pathPattern, limit, offset);
+      return { count: results.length, offset, limit, detections: results };
+    },
+  }),
+
+  defineTool({
+    name: 'search_by_source_path',
+    description: 'Full-text search within a specific repository or directory path. RECOMMENDED for repository-specific queries as it combines semantic search with path filtering, returning only relevant results (vs list_by_source_path which returns ALL detections). Use this to compare coverage between sources or reduce noise from irrelevant repositories.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (FTS5 syntax supported). Examples: "powershell.exe", "CVE-2024-27198", "credential access", "T1003"',
+        },
+        path_pattern: {
+          type: 'string',
+          description: 'Path pattern to filter by (substring search). Examples: "nviso", "jkerai1", "rules-threat-hunting", "security_content/detections"',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max results to return',
+          default: 50,
+          minimum: 1,
+          maximum: 500,
+        },
+      },
+      required: ['query', 'path_pattern'],
+    },
+    handler: async (args) => {
+      const query = args.query as string;
+      const pathPattern = args.path_pattern as string;
+      const limit = (args.limit as number) || 50;
+
+      if (!query || !pathPattern) {
+        return {
+          error: true,
+          code: 'MISSING_REQUIRED_ARG',
+          message: 'Both query and path_pattern are required',
+          hint: 'Provide both a search query and path pattern',
+        };
+      }
+
+      const results = searchBySourcePath(query, pathPattern, limit);
+
+      if (results.length === 0) {
+        return {
+          results: [],
+          suggestions: {
+            try_broader: 'Try a simpler query or different path pattern',
+            try_list: 'Use list_by_source_path to see all detections from this source',
+          },
+        };
+      }
+
+      return { count: results.length, detections: results };
     },
   }),
 ];
