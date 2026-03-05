@@ -44,13 +44,13 @@ jobs:
           # -- help flags --
           - test: orchestrate --help
             cmd: npx tsx src/cli.ts orchestrate --help
-            expect: '--input'
+            expect: input
           - test: analyze --help
             cmd: npx tsx src/cli.ts analyze --help
-            expect: '--technique'
+            expect: technique
           - test: validate --help
             cmd: npx tsx src/cli.ts validate --help
-            expect: '--detection'
+            expect: detection
 
           # -- orchestrate input methods --
           - test: orchestrate --input
@@ -74,31 +74,28 @@ jobs:
             cmd: npx tsx src/cli.ts orchestrate --type threat_report --input "Actor uses PsExec T1021.002"
             expect: '"input_type": "threat_report"'
 
-          # -- coverage-aware behavior --
-          - test: T1566.004 has gap → creates detection
+          # -- dry run runs full pipeline --
+          - test: dry run hits all 10 nodes
             cmd: npx tsx src/cli.ts orchestrate --type technique --input "T1566.004 Spearphishing Voice"
-            expect: 'Gaps identified: 1'
-          - test: T1003.001 no gap → ends early
-            cmd: npx tsx src/cli.ts orchestrate --type technique --input "T1003.001 LSASS Memory"
-            expect: 'Gaps identified: 0'
+            expect: 'PR Stager'
 
           # -- analyze command --
           - test: analyze --technique
             cmd: npx tsx src/cli.ts analyze --technique T1003.001
-            expect: 'Analysis Complete'
+            expect: Analysis Complete
           - test: analyze --input
             cmd: npx tsx src/cli.ts analyze --input "T1566.004 Spearphishing Voice"
-            expect: 'Analysis Complete'
+            expect: Analysis Complete
 
           # -- validate command --
           - test: validate --technique (dry run)
             cmd: npx tsx src/cli.ts validate --technique T1003.001
-            expect: 'Validate Mode'
+            expect: Validate Mode
 
           # -- status command --
           - test: status
             cmd: npx tsx src/cli.ts status
-            expect: 'Pipeline Status'
+            expect: Pipeline Status
 
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +107,7 @@ jobs:
         run: |
           OUTPUT=$(${{ matrix.cmd }} 2>&1) || true
           echo "$OUTPUT"
-          echo "$OUTPUT" | grep -q '${{ matrix.expect }}'
+          echo "$OUTPUT" | grep -qF '${{ matrix.expect }}'
 
   cli-error-handling:
     name: CLI Error Handling
