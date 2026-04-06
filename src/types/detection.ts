@@ -1,17 +1,17 @@
 /**
  * Detection Types
- * Core detection interfaces for Sigma, Splunk ESCU, Elastic, and KQL rules
+ * Core detection interfaces for Sigma, Splunk ESCU, Elastic, KQL, and Sublime rules
  */
 
 /**
- * Unified detection schema - normalized from Sigma, Splunk ESCU, Elastic, and KQL sources
+ * Unified detection schema - normalized from Sigma, Splunk ESCU, Elastic, KQL, and Sublime sources
  */
 export interface Detection {
   id: string;
   name: string;
   description: string;
-  query: string; // detection logic (YAML for Sigma, SPL for Splunk, EQL/KQL for Elastic)
-  source_type: 'sigma' | 'splunk_escu' | 'elastic' | 'kql';
+  query: string; // detection logic (YAML for Sigma, SPL for Splunk, EQL/KQL for Elastic, MQL for Sublime)
+  source_type: 'sigma' | 'splunk_escu' | 'elastic' | 'kql' | 'sublime';
   mitre_ids: string[];
   logsource_category: string | null;
   logsource_product: string | null;
@@ -26,13 +26,13 @@ export interface Detection {
   tags: string[];
   file_path: string;
   raw_yaml: string;
-  
+
   // Enhanced fields for better semantic search
   cves: string[];                    // CVE IDs (e.g., CVE-2024-27198)
   analytic_stories: string[];        // Splunk analytic stories
   data_sources: string[];            // Data sources (e.g., Sysmon EventID 1, Windows Security)
-  detection_type: string | null;     // TTP, Anomaly, Hunting, Correlation
-  asset_type: string | null;         // Endpoint, Web Server, Cloud, Network
+  detection_type: string | null;     // TTP, Anomaly, Hunting, Correlation, Rule, Exclusion
+  asset_type: string | null;         // Endpoint, Web Server, Cloud, Network, Email
   security_domain: string | null;    // endpoint, network, cloud, access
   process_names: string[];           // Process names referenced in detection (w3wp.exe, cmd.exe, etc)
   file_paths: string[];              // Interesting file paths referenced (C:\Windows\Temp, etc)
@@ -42,6 +42,11 @@ export interface Detection {
   kql_category: string | null;       // Category derived from path (e.g., "Defender For Endpoint")
   kql_tags: string[];                // Tags/keywords extracted from KQL markdown or metadata
   kql_keywords: string[];            // Lightweight extracted keywords for search
+
+  // Sublime-specific fields
+  sublime_attack_types: string[];    // Sublime attack types (BEC/Fraud, Credential Phishing, etc.)
+  sublime_detection_methods: string[]; // Sublime detection methods (Content analysis, URL analysis, etc.)
+  sublime_tactics: string[];         // Sublime tactics_and_techniques (Evasion, Impersonation: Brand, etc.)
 }
 
 /**
@@ -50,10 +55,30 @@ export interface Detection {
 export interface DetectionSummary {
   id: string;
   name: string;
-  source_type: 'sigma' | 'splunk_escu' | 'elastic' | 'kql';
+  source_type: 'sigma' | 'splunk_escu' | 'elastic' | 'kql' | 'sublime';
   mitre_ids: string[];
   severity: string | null;
   mitre_tactics: string[];
+}
+
+/**
+ * Sublime Security rule structure (YAML format with MQL source)
+ * @see https://github.com/sublime-security/sublime-rules
+ */
+export interface SublimeRule {
+  name: string;
+  description: string;
+  type: 'rule' | 'exclusion';
+  source: string; // MQL (Message Query Language) query
+  id?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  references?: string[];
+  tags?: string[];
+  authors?: Array<{ name?: string; twitter?: string; github?: string; email?: string }>;
+  attack_types?: string[];
+  tactics_and_techniques?: string[];
+  detection_methods?: string[];
+  false_positives?: string[];
 }
 
 /**
