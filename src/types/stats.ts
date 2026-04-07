@@ -12,6 +12,7 @@ export interface IndexStats {
   splunk_escu: number;
   elastic: number;
   kql: number;
+  sublime: number;
   by_severity: Record<string, number>;
   by_logsource_product: Record<string, number>;
   mitre_coverage: number;

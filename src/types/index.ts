@@ -21,6 +21,7 @@ export type {
   ElasticRule,
   ElasticThreat,
   ElasticTechnique,
+  SublimeRule,
 } from './detection.js';
 
 // Story types
