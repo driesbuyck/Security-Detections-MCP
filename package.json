@@ -40,6 +40,9 @@
     "kusto",
     "defender",
     "sentinel",
+    "sublime",
+    "crowdstrike",
+    "cql",
     "siem",
     "mitre",
     "attack"

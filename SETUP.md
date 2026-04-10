@@ -1,4 +1,4 @@
-# Setup Guide - Detections MCP v3.0
+# Setup Guide - Detections MCP v3.1
 
 Get the autonomous detection engineering platform running on your machine.
 
@@ -133,10 +133,17 @@ cd detection-rules && git sparse-checkout set rules && cd ..
 git clone --depth 1 https://github.com/Bert-JanP/Hunting-Queries-Detection-Rules.git kql-bertjanp
 git clone --depth 1 https://github.com/jkerai1/KQL-Queries.git kql-jkerai1
 
+# Sublime Security rules (~900+ email security rules)
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sublime-security/sublime-rules.git
+cd sublime-rules && git sparse-checkout set detection-rules && cd ..
+
+# CrowdStrike CQL Hub (~139+ queries)
+git clone --depth 1 https://github.com/ByteRay-Labs/Query-Hub.git cql-hub
+
 cd ..
 ```
 
-> **Tip**: You don't need all of them. Start with Sigma if you're unsure -- it's the most portable.
+> **Tip**: You don't need all of them. Start with Sigma if you're unsure -- it's the most portable. Sublime is great for email-based threat detections, and CQL Hub covers CrowdStrike-specific queries.
 
 ---
 
@@ -159,7 +166,9 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
         "SPLUNK_PATHS": "/absolute/path/to/detections/security_content/detections",
         "ELASTIC_PATHS": "/absolute/path/to/detections/detection-rules/rules",
         "KQL_PATHS": "/absolute/path/to/detections/kql-bertjanp,/absolute/path/to/detections/kql-jkerai1",
-        "STORY_PATHS": "/absolute/path/to/detections/security_content/stories"
+        "STORY_PATHS": "/absolute/path/to/detections/security_content/stories",
+        "SUBLIME_PATHS": "/absolute/path/to/detections/sublime-rules/detection-rules",
+        "CQL_HUB_PATHS": "/absolute/path/to/detections/cql-hub/queries"
       }
     }
   }
@@ -184,7 +193,9 @@ Add to `~/.vscode/mcp.json`:
         "SPLUNK_PATHS": "/absolute/path/to/detections/security_content/detections",
         "ELASTIC_PATHS": "/absolute/path/to/detections/detection-rules/rules",
         "KQL_PATHS": "/absolute/path/to/detections/kql-bertjanp,/absolute/path/to/detections/kql-jkerai1",
-        "STORY_PATHS": "/absolute/path/to/detections/security_content/stories"
+        "STORY_PATHS": "/absolute/path/to/detections/security_content/stories",
+        "SUBLIME_PATHS": "/absolute/path/to/detections/sublime-rules/detection-rules",
+        "CQL_HUB_PATHS": "/absolute/path/to/detections/cql-hub/queries"
       }
     }
   }
@@ -207,7 +218,9 @@ If you're running VS Code on Windows but your files are inside WSL:
         "SPLUNK_PATHS": "/home/youruser/detections/security_content/detections",
         "ELASTIC_PATHS": "/home/youruser/detections/detection-rules/rules",
         "KQL_PATHS": "/home/youruser/detections/kql-bertjanp",
-        "STORY_PATHS": "/home/youruser/detections/security_content/stories"
+        "STORY_PATHS": "/home/youruser/detections/security_content/stories",
+        "SUBLIME_PATHS": "/home/youruser/detections/sublime-rules/detection-rules",
+        "CQL_HUB_PATHS": "/home/youruser/detections/cql-hub/queries"
       }
     }
   }
@@ -228,7 +241,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
       "args": ["-y", "security-detections-mcp"],
       "env": {
         "SIGMA_PATHS": "/absolute/path/to/detections/sigma/rules",
-        "SPLUNK_PATHS": "/absolute/path/to/detections/security_content/detections"
+        "SPLUNK_PATHS": "/absolute/path/to/detections/security_content/detections",
+        "SUBLIME_PATHS": "/absolute/path/to/detections/sublime-rules/detection-rules",
+        "CQL_HUB_PATHS": "/absolute/path/to/detections/cql-hub/queries"
       }
     }
   }
@@ -255,7 +270,7 @@ The SQLite database is stored at `~/.cache/security-detections-mcp/detections.sq
 
 ## Step 6 (Optional): Set Up the Autonomous Pipeline
 
-This is the v3.0 LangGraph pipeline that goes from threat intel to validated detections. It requires an LLM API key and optionally a lab environment.
+This is the v3.1 LangGraph pipeline that goes from threat intel to validated detections. It requires an LLM API key and optionally a lab environment.
 
 ### Install the Agents Package
 
@@ -464,14 +479,14 @@ Once you're set up:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    Security Detections MCP v3.0                   │
+│                    Security Detections MCP v3.1                   │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  MCP Server (root)              Autonomous Pipeline (agents/)    │
 │  ┌─────────────────────┐       ┌────────────────────────────┐   │
 │  │ 71+ tools            │       │ LangGraph workflow          │   │
 │  │ 11 prompts           │       │ CTI → Coverage → Detect →  │   │
-│  │ 7,200+ detections    │◄─────►│ Atomic → Validate → PR     │   │
+│  │ 8,200+ detections    │◄─────►│ Atomic → Validate → PR     │   │
 │  │ SQLite FTS5 index    │       │                            │   │
 │  └─────────────────────┘       └────────────────────────────┘   │
 │           │                              │                       │

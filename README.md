@@ -4,6 +4,8 @@ An MCP (Model Context Protocol) server that lets LLMs query a unified database o
 
 > **New here? Start with the [Setup Guide](./SETUP.md)** -- covers macOS, Windows (WSL & native), and Linux step by step.
 
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=security-detections&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInNlY3VyaXR5LWRldGVjdGlvbnMtbWNwIl0sImVudiI6eyJTSUdNQV9QQVRIUyI6Ii9wYXRoL3RvL3NpZ21hL3J1bGVzLC9wYXRoL3RvL3NpZ21hL3J1bGVzLXRocmVhdC1odW50aW5nIiwiU1BMVU5LX1BBVEhTIjoiL3BhdGgvdG8vc2VjdXJpdHlfY29udGVudC9kZXRlY3Rpb25zIiwiU1RPUllfUEFUSFMiOiIvcGF0aC90by9zZWN1cml0eV9jb250ZW50L3N0b3JpZXMiLCJFTEFTVElDX1BBVEhTIjoiL3BhdGgvdG8vZGV0ZWN0aW9uLXJ1bGVzL3J1bGVzIiwiS1FMX1BBVEhTIjoiL3BhdGgvdG8va3FsLXJ1bGVzIiwiU1VCTElNRV9QQVRIUyI6Ii9wYXRoL3RvL3N1YmxpbWUtcnVsZXMvZGV0ZWN0aW9uLXJ1bGVzIiwiQ1FMX0hVQl9QQVRIUyI6Ii9wYXRoL3RvL2NxbC1odWIvcXVlcmllcyJ9fQ==)
+
 ## What's New in 3.1 - New Detection Sources
 
 - **CrowdStrike CQL Hub** - Query and search CrowdStrike Query Language (CQL) detections from the CQL Hub community repository
@@ -95,10 +97,6 @@ The autonomous pipeline integrates with existing MCPs:
 ```
 
 See the [Autonomous Platform Documentation](./docs/AUTONOMOUS.md) for full details, and the [E2E Testing Guide](./docs/E2E-TESTING-GUIDE.md) for per-SIEM setup (Splunk, Sentinel, Elastic, Sigma).
-
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=security-detections&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInNlY3VyaXR5LWRldGVjdGlvbnMtbWNwIl0sImVudiI6eyJTSUdNQV9QQVRIUyI6Ii9wYXRoL3RvL3NpZ21hL3J1bGVzLC9wYXRoL3RvL3NpZ21hL3J1bGVzLXRocmVhdC1odW50aW5nIiwiU1BMVU5LX1BBVEhTIjoiL3BhdGgvdG8vc2VjdXJpdHlfY29udGVudC9kZXRlY3Rpb25zIiwiU1RPUllfUEFUSFMiOiIvcGF0aC90by9zZWN1cml0eV9jb250ZW50L3N0b3JpZXMiLCJFTEFTVElDX1BBVEhTIjoiL3BhdGgvdG8vZGV0ZWN0aW9uLXJ1bGVzL3J1bGVzIiwiS1FMX1BBVEhTIjoiL3BhdGgvdG8va3FsLXJ1bGVzIn19)
-
-> **Detailed setup**: See the **[Setup Guide](./SETUP.md)** for step-by-step install on macOS, Windows (WSL & native), and Linux with troubleshooting for common issues.
 
 ## 🐛 Version 2.1.1 (Bug Fix)
 
