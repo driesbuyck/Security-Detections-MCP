@@ -20,6 +20,9 @@ export function createSchema(db: Database.Database): void {
   createStoriesFts(db);
   createStoriesTriggers(db);
   createStoriesIndexes(db);
+  createProcedureReferenceTable(db);
+  createJunctionTables(db);
+  createAttackTables(db);
 }
 
 /**
@@ -214,6 +217,29 @@ function createStoriesIndexes(db: Database.Database): void {
 }
 
 /**
+ * Create the procedure_reference table for storing auto-extracted
+ * and hand-curated procedure-level ATT&CK coverage data.
+ */
+function createProcedureReferenceTable(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS procedure_reference (
+      id TEXT PRIMARY KEY,
+      technique_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'auto',
+      indicators TEXT NOT NULL,
+      detection_count INTEGER DEFAULT 0,
+      confidence REAL DEFAULT 1.0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_proc_ref_technique ON procedure_reference(technique_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_proc_ref_source ON procedure_reference(source)`);
+}
+
+/**
  * Create the saved queries table for caching.
  * Called on-demand when first accessed.
  */
@@ -232,4 +258,100 @@ export function createSavedQueriesTable(db: Database.Database): void {
   
   db.exec(`CREATE INDEX IF NOT EXISTS idx_saved_query_type ON saved_queries(query_type)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_saved_query_name ON saved_queries(name)`);
+}
+
+/**
+ * Create junction tables for materialized many-to-many relationships.
+ * Replaces JSON LIKE scans with indexed JOINs.
+ */
+function createJunctionTables(db: Database.Database): void {
+  // Detection → Technique many-to-many
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS detection_techniques (
+      detection_id TEXT NOT NULL,
+      technique_id TEXT NOT NULL,
+      PRIMARY KEY (detection_id, technique_id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_dt_technique ON detection_techniques(technique_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_dt_detection ON detection_techniques(detection_id)`);
+
+  // Technique → Tactic many-to-many (populated from detections + STIX)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS technique_tactics (
+      technique_id TEXT NOT NULL,
+      tactic_name TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'detection',
+      PRIMARY KEY (technique_id, tactic_name)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tt_tactic ON technique_tactics(tactic_name)`);
+}
+
+/**
+ * Create tables for MITRE ATT&CK STIX data (threat actors, software, techniques).
+ * Populated from enterprise-attack.json when ATTACK_STIX_PATH is configured.
+ */
+function createAttackTables(db: Database.Database): void {
+  // Full ATT&CK technique catalog from STIX
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS attack_techniques (
+      technique_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      platforms TEXT,
+      data_sources TEXT,
+      is_subtechnique INTEGER DEFAULT 0,
+      parent_technique_id TEXT,
+      url TEXT
+    )
+  `);
+
+  // Threat actor catalog from STIX intrusion-sets
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS attack_actors (
+      actor_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      aliases TEXT,
+      description TEXT,
+      external_references TEXT,
+      created TEXT,
+      modified TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_actor_name ON attack_actors(name)`);
+
+  // Software (malware + tools) from STIX
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS attack_software (
+      software_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      software_type TEXT,
+      description TEXT,
+      platforms TEXT,
+      aliases TEXT
+    )
+  `);
+
+  // Actor → Technique junction with procedure context
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS actor_techniques (
+      actor_id TEXT NOT NULL,
+      technique_id TEXT NOT NULL,
+      description TEXT,
+      PRIMARY KEY (actor_id, technique_id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_at_technique ON actor_techniques(technique_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_at_actor ON actor_techniques(actor_id)`);
+
+  // Software → Technique junction
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS software_techniques (
+      software_id TEXT NOT NULL,
+      technique_id TEXT NOT NULL,
+      description TEXT,
+      PRIMARY KEY (software_id, technique_id)
+    )
+  `);
 }
