@@ -23,7 +23,6 @@ npm-debug.log*
 # vercel
 .vercel
 
-# admin queries (contains sensitive SQL for tier/role changes)
 supabase/admin-queries.sql
 
 # email templates (configured in Supabase dashboard, contain branding)
